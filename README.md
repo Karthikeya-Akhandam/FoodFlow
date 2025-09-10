@@ -1,4 +1,4 @@
-# 🍽️ FoodShare
+# 🍽️ FoodFlow
 
 A modern food sharing platform that connects food donors (collaborators) with organizations that help feed communities. Built with Go backend and React frontend.
 
