@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: foodflow-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-foodflow}
+      POSTGRES_USER: ${POSTGRES_USER:-foodflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-foodflow} -d ${POSTGRES_DB:-foodflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - foodflow-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: foodflow-redis-prod
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - foodflow-network
+    restart: unless-stopped
+
+  # FoodFlow API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: foodflow-api-prod
+    environment:
+      - PORT=${PORT:-8080}
+      - DB_URL=postgres://${POSTGRES_USER:-foodflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-foodflow}?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - JWT_PRIVATE_KEY_PATH=./keys/app.rsa
+      - JWT_PUBLIC_KEY_PATH=./keys/app.rsa.pub
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-24h}
+      - JWT_ISSUER=${JWT_ISSUER:-foodflow}
+      - SERVINGS_PER_CREDIT=${SERVINGS_PER_CREDIT:-10}
+      - TOKEN_MULTIPLIER=${TOKEN_MULTIPLIER:-5}
+      - CLAIM_COOLOFF_SECONDS=${CLAIM_COOLOFF_SECONDS:-600}
+      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS:-10}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-20}
+      - IDEMPOTENCY_TTL=${IDEMPOTENCY_TTL:-24h}
+      - MONTHLY_CREDITS_BASE=${MONTHLY_CREDITS_BASE:-50}
+      - MONTHLY_CREDITS_K=${MONTHLY_CREDITS_K:-0.2}
+      - REMOTE_PROXY_BONUS=${REMOTE_PROXY_BONUS:-0.1}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - foodflow-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: foodflow-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    networks:
+      - foodflow-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  foodflow-network:
+    driver: bridge

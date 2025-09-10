@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: foodflow-postgres
+    environment:
+      POSTGRES_DB: foodflow
+      POSTGRES_USER: foodflow
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./internal/db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foodflow -d foodflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - foodflow-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: foodflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - foodflow-network
+
+  # FoodFlow API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: foodflow-api
+    environment:
+      - PORT=8080
+      - DB_URL=postgres://foodflow:password@postgres:5432/foodflow?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - JWT_PRIVATE_KEY_PATH=./keys/app.rsa
+      - JWT_PUBLIC_KEY_PATH=./keys/app.rsa.pub
+      - JWT_EXPIRATION=24h
+      - JWT_ISSUER=foodflow
+      - SERVINGS_PER_CREDIT=10
+      - TOKEN_MULTIPLIER=5
+      - CLAIM_COOLOFF_SECONDS=600
+      - RATE_LIMIT_RPS=10
+      - RATE_LIMIT_BURST=20
+      - IDEMPOTENCY_TTL=24h
+      - MONTHLY_CREDITS_BASE=50
+      - MONTHLY_CREDITS_K=0.2
+      - REMOTE_PROXY_BONUS=0.1
+      - LOG_LEVEL=info
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - foodflow-network
+    restart: unless-stopped
+
+  # Database Migration Service
+  migrate:
+    image: migrate/migrate:v4.16.2
+    container_name: foodflow-migrate
+    environment:
+      - PG_URL=postgres://foodflow:password@postgres:5432/foodflow?sslmode=disable
+    volumes:
+      - ./internal/db/migrations:/migrations
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://foodflow:password@postgres:5432/foodflow?sslmode=disable",
+      "up"
+    ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - foodflow-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  foodflow-network:
+    driver: bridge
