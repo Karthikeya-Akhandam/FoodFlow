@@ -427,7 +427,7 @@ func main() {
 	var admin User
 	if err := db.Where("role = ?", "admin").First(&admin).Error; err != nil {
 		pw, _ := hashPassword("admin123")
-		admin = User{Name: "admin", Email: "admin@local", PasswordHash: pw, Role: "admin"}
+		admin = User{Name: "admin", Email: "admin@local.in", PasswordHash: pw, Role: "admin"}
 		db.Create(&admin)
 	}
 
