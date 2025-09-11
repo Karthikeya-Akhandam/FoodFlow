@@ -79,7 +79,7 @@ type Claim struct {
    ------------------------------- */
 
 var db *gorm.DB
-var jwtSecret = []byte("pX7kYt4mW9hR2zQ1sA8uJc3nV5dL0gFq")
+var jwtSecret = []byte("your-secure-jwt-key")
 
 const CREDIT_FACTOR = 1
 const TOKEN_FACTOR = 1
@@ -92,7 +92,7 @@ func initDB() {
 	dsn := os.Getenv("DATABASE_DSN")
 	if dsn == "" {
 		// default local postgres dsn
-		dsn = "host=localhost user=postgres password=12345678 dbname=foodshare port=5432 sslmode=disable TimeZone=Asia/Kolkata"
+		dsn = "host=localhost user=postgres password=your-password dbname=foodshare port=5432 sslmode=disable TimeZone=Asia/Kolkata"
 	}
 	var err error
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
