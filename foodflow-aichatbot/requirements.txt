@@ -1,0 +1,15 @@
+sentence-transformers==2.2.2
+langchain
+flask
+flask-sqlalchemy
+flask-cors
+flask-migrate
+pypdf
+python-dotenv
+pinecone[grpc]
+langchain-pinecone
+langchain_community
+langchain_openai
+langchain_experimental
+psycopg2-binary
+-e .
